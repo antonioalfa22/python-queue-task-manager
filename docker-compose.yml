@@ -1,0 +1,121 @@
+version: '3.9'
+
+networks:
+  queue-network:
+
+services:
+  api:
+    container_name: api
+    build: ./api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./api:/app
+    networks:
+      - queue-network
+
+  postgres:
+    container_name: postgres
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - queue-network
+  
+  redis:
+    container_name: redis
+    image: 'redis:latest'
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "6379:6379"
+    networks:
+      - queue-network
+
+  flower:
+    container_name: flower
+    build: ./airflow
+    command: celery flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    networks:
+      - queue-network
+  
+  airflow-init:
+    container_name: airflow-init
+    build: ./airflow
+    depends_on:
+      - postgres
+      - redis
+    command: -c "airflow db init && airflow users create --firstname admin --lastname admin --email admin --password admin --username admin --role Admin"
+    entrypoint: /bin/bash
+    networks:
+      - queue-network
+
+  airflow_webserver:
+    container_name: airflow_webserver
+    build: ./airflow
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: webserver
+    depends_on:
+      - postgres
+      - redis
+      - airflow-init
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /opt/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    networks:
+      - queue-network
+
+  airflow_scheduler:
+    container_name: airflow_scheduler
+    build: ./airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: scheduler
+    depends_on:
+      - airflow_webserver
+    deploy:
+      restart_policy:
+        condition: always
+        delay: 5s
+        window: 120s
+    networks:
+      - queue-network
+
+  airflow_worker_1:
+    container_name: airflow_worker_1
+    build: ./airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: celery worker -H airflow_worker_1
+    depends_on:
+      - airflow_webserver
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 8s
+        max_attempts: 3
+    networks:
+      - queue-network
+    
