@@ -20,6 +20,7 @@ def trigger_dag():
         "conf": {},
         "dag_run_id": "api__" + datetime.now().strftime("%Y%m%dT%H%M%S"),
         "note": "API triggered",
+        "logical_date": f"{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}+00:00"
     }
     credentials = base64.b64encode(b'admin:admin').decode('utf-8')
     headers = {

@@ -97,7 +97,7 @@ services:
       - airflow_webserver
     deploy:
       restart_policy:
-        condition: always
+        condition: on-failure
         delay: 5s
         window: 120s
     networks:
